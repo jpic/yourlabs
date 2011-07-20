@@ -20,6 +20,7 @@
             minCharacters: 2,
             defaultValue: 'type your search here',
             activeClass: 'active',
+            queryVariable: 'q',
         };
         this.setOptions(options);
         this.initialize();
@@ -185,14 +186,17 @@
             this.fetchAutocomplete();
         },
         fetchAutocomplete: function() {
-            var autocomplete;
+            var autocomplete, data;
 
             if (this.xhr) {
                 this.xhr.abort();
             }
 
             autocomplete = this;
+            data = {}
+            data[this.options.queryVariable] = this.value;
             this.xhr = $.ajax(this.options.url, {
+                'data': data,
                 'complete': function(jqXHR, textStatus) {
                     autocomplete.fixPosition();
                     autocomplete.show(jqXHR.responseText);
