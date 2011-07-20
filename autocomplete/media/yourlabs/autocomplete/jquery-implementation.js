@@ -92,6 +92,7 @@
             } else {
                 this.el.keydown(function(e) { autocomplete.onKeyPress(e); });
             }
+            this.el.blur(function(e) { autocomplete.hide(); });
         },
         onKeyPress: function(e) {
             var option;
