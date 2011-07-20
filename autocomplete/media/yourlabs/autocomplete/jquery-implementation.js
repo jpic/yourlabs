@@ -1,14 +1,13 @@
-$(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplete, option) {
-    link = $(option).find('a:first');
-    if (link.length && link.attr('href') != undefined) {
-        window.location.href = link.attr('href');
-        return false;
-    } else {
-        alert('sorry, i dunno what to do with your selection!!');
-    }
-});
-
 (function($) {
+    $(document).bind('yourlabs_autocomplete.activateOption', function(e, autocomplete, option) {
+        option.addClass(autocomplete.options.activeClass);
+        autocomplete.show();
+    });
+    $(document).bind('yourlabs_autocomplete.deactivateOption', function(e, autocomplete, option) {
+        option.removeClass(autocomplete.options.activeClass);
+        autocomplete.show();
+    });
+
     function Autocomplete(el, options) {
         this.el = el;
         this.el.attr('autocomplete', 'off');
@@ -20,6 +19,7 @@ $(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplet
             id: false,
             minCharacters: 2,
             defaultValue: 'type your search here',
+            activeClass: 'active',
         };
         this.setOptions(options);
         this.initialize();
@@ -65,10 +65,10 @@ $(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplet
 
             $('.yourlabs_autocomplete.inner_container.id_'+this.options.id+' .option').live({
                 mouseenter: function(e) {
-                    $(this).addClass('active');
+                    $(document).trigger('yourlabs_autocomplete.activateOption', [autocomplete, $(this)]);
                 },
                 mouseleave: function(e) {
-                    $(this).removeClass('active');
+                    $(document).trigger('yourlabs_autocomplete.deactivateOption', [autocomplete, $(this)]);
                 },
                 click: function(e) {
                     var link, text;
@@ -77,7 +77,7 @@ $(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplet
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    $(document).trigger('yourlabs.autocomplete.optionSelected', [autocomplete, this]);
+                    $(document).trigger('yourlabs_autocomplete.selectOption', [autocomplete, $(this)]);
                 },
             });
 
@@ -91,7 +91,82 @@ $(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplet
             this.innerContainer = $('.yourlabs_autocomplete.inner_container.id_'+this.options.id);
             this.outerContainer = $('.yourlabs_autocomplete.outer_container.id_'+this.options.id);
 
+            if (window.opera) {
+                this.el.keypress(function(e) { autocomplete.onKeyPress(e); });
+            } else {
+                this.el.keydown(function(e) { autocomplete.onKeyPress(e); });
+            }
+        },
+        onKeyPress: function(e) {
+            var option;
 
+            switch (e.keyCode) {
+                case 27: //KEY_ESC:
+                    this.el.val();
+                    this.hide();
+                    break;
+                case 9: //KEY_TAB:
+                    break;
+                case 13: //KEY_RETURN:
+                    option = this.innerContainer.find('.option.' + this.options.activeClass);
+                    if (option) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        $(document).trigger('yourlabs_autocomplete.selectOption', [this, option]);
+                    }
+                    if(e.keyCode === 9){ return; }
+                    break;
+                case 38: //KEY_UP:
+                    this.move('up');
+                    break;
+                case 40: //KEY_DOWN:
+                    this.move('down');
+                    break;
+                default:
+                    return;
+            }
+            e.stopImmediatePropagation();
+            e.preventDefault();
+        },
+        show: function(html) {
+            if (html) {
+                this.innerContainer.html(html);
+            }
+            if (!this.innerContainer.is(':visible')) {
+                this.innerContainer.show();
+            }
+        },
+        hide: function() {
+            this.innerContainer.hide();
+        },
+        move: function(way) {
+            var current, target, first, last;
+            current = this.innerContainer.find('.option.' + this.options.activeClass);
+            first = this.innerContainer.find('.option:first');
+            last = this.innerContainer.find('.option:last');
+
+            if (current.length) {
+                if (way == 'up') {
+                    console.log(current)
+                    target = current.prevAll('.option:last');
+                    if (!target.length) {
+                        target = last;
+                    }
+                } else {
+                    target = current.nextAll('.option:first');
+                    if (!target.length) {
+                        target = first;
+                    }
+                }
+                $(document).trigger('yourlabs_autocomplete.deactivateOption', [this, current]);
+            } else {
+                if (way == 'up') {
+                    target = last;
+                } else {
+                    target = first;
+                }
+            }
+            $(document).trigger('yourlabs_autocomplete.activateOption', [this, target]);
         },
         fixPosition: function() {
             var offset = this.el.offset();
@@ -123,8 +198,7 @@ $(document).bind('yourlabs.autocomplete.optionSelected', function(e, autocomplet
             this.xhr = $.ajax(this.options.url, {
                 'complete': function(jqXHR, textStatus) {
                     autocomplete.fixPosition();
-                    autocomplete.innerContainer.html(jqXHR.responseText);
-                    autocomplete.innerContainer.show();
+                    autocomplete.show(jqXHR.responseText);
                 },
             });
         },
