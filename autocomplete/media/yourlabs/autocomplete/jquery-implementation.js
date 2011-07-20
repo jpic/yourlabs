@@ -81,11 +81,7 @@
                 },
             });
 
-            function refresh() {
-                autocomplete.refresh();
-                window.setTimeout(refresh, autocomplete.options.timeout);
-            }
-            window.setTimeout(refresh, this.options.timeout);
+            this.el.keyup(function(e) { autocomplete.refresh(); });
 
             $('<div class="yourlabs_autocomplete outer_container id_'+this.options.id+'" style="position:absolute;z-index:9999;"><div class="yourlabs_autocomplete id_'+this.options.id+'"><div class="yourlabs_autocomplete inner_container  id_'+this.options.id+'" style="display:none;"></div></div></div>').appendTo('body');
             this.innerContainer = $('.yourlabs_autocomplete.inner_container.id_'+this.options.id);
