@@ -1,11 +1,19 @@
 import logging
 import pickle
+import traceback
 
 from django.db.models import get_model
 from django.conf import settings
 from django.test import client
 
 logger = logging.getLogger('smoke')
+
+settings.LOGGING['loggers']['gsm']['level'] = 'INFO'
+
+class SmokeUrl(object):
+    def __init__(self, url, tags):
+        self.url = url
+        self.tags = tags
 
 class Smoke(object):
     def get_client(self):
@@ -17,17 +25,27 @@ class Smoke(object):
         FailUrl = get_model('smoke', 'failurl')
         c = self.get_client()
 
-        for url in self.get_urls():
-            failurl = FailUrl(url=url)
+        for smoke_url in self.get_urls():
+            FailUrl.objects.filter(url=smoke_url.url).delete()
+            failurl = FailUrl(url=smoke_url.url)
 
             try:
-                response = c.get(url)
+                response = c.get(smoke_url.url)
                 if response.status_code != 200:
+                    logger.error('status code %s from %s' % (response.status_code, smoke_url.url))
                     failurl.reason = 'status code %s' % response.status_code
-                    logger.error('status code %s from %s' % (response.status_code, url))
                     failurl.save()
+                    failurl.tags.add(smoke_url.tags)
+                    continue
             except Exception as e:
-                failurl.exception = pickle.dumps(e)
+                logger.error('exception %s in %s' % (e, smoke_url.url))
+                print traceback.print_tb(e.exc_info[2])
+                failurl.traceback = pickle.dumps(traceback.extract_tb(e.exc_info[2]))
+                failurl.exception = unicode(e)
                 failurl.reason = 'exception'
                 failurl.save()
-                logger.error('exception %s in %s' % (e, url))
+                failurl.tags.add(smoke_url.tags)
+                continue
+            
+            # should be ok
+            FailUrl.objects.filter(url=smoke_url.url).delete()

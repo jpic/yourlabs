@@ -1,3 +1,5 @@
+import traceback
+
 from django.db.models import Q
 from django.db import connection, transaction
 from django.db import models
@@ -9,6 +11,8 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 
+from taggit.managers import TaggableManager
+
 class FailUrl(models.Model):
     url = models.URLField()
     creation_datetime = models.DateTimeField(auto_now_add=True)
@@ -17,6 +21,9 @@ class FailUrl(models.Model):
     request = models.TextField(null=True, blank=True)
     response = models.TextField(null=True, blank=True)
     reason = models.TextField(null=True, blank=True)
+    traceback = models.TextField(null=True, blank=True)
+
+    tags = TaggableManager()
 
     class Meta:
         ordering = ['creation_datetime']
