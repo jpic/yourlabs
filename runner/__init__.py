@@ -1,6 +1,10 @@
+import time
 import traceback
+import signal
 import sys
 import datetime
+import os
+import os.path
 
 from django.core.management import call_command
 from django.conf import settings
@@ -9,15 +13,56 @@ from django.core.mail import send_mail
 from gsm.management.commands.gsm_sync import Command as GsmSyncCommand
 
 class Runner(object):
-    def __init__(self, functions, logger):
+    def __init__(self, functions, logger, pidfile=None, killconcurrent=True):
         self.functions = functions
         self.logger = logger
         self.exceptions = {}
         self.consecutive_exceptions = {}
+        self.killconcurrent = killconcurrent
 
         for function in self.functions:
             self.exceptions[function.__name__] = []
             self.consecutive_exceptions[function.__name__] = 0
+
+        self.pidfile = pidfile
+        if self.pidfile is None:
+            self.pidfile = '%s/%s.pid' % (
+                settings.RUN_ROOT,
+                '_'.join([f.__name__ for f in self.functions])
+            )
+        self.concurrency_security()
+
+    def concurrency_security(self):
+        if os.path.exists(self.pidfile):
+            f = open(self.pidfile, 'r')
+            concurrent = f.read()
+            f.close()
+            if os.path.exists('/proc/%s' % concurrent):
+                if self.killconcurrent:
+                    print "Killing %s" % concurrent
+                    os.kill(int(concurrent), signal.SIGKILL)
+
+                    i = 0
+                    while os.path.exists('/proc/%s' % concurrent):
+                        time.sleep(1)
+                        if i == 30:
+                            print "Error: Sent SIGKILL to pid %s 30 seconds ago, in vain"
+                            os._exit(-1)
+                else:
+                    print "Error: %s contains a pid (%s) which is still running !" % (
+                        self.pidfile,
+                        concurrent
+                    )
+                    os._exit(-1)
+            else:
+                os.remove(self.pidfile)
+
+        f = open(self.pidfile, 'w')
+        f.write(str(os.getpid()))
+        f.flush()
+        # Forcibly sync disk
+        os.fsync(f.fileno())
+        f.close()
 
     def run(self):
         while True:
@@ -81,3 +126,6 @@ class Runner(object):
                             ['jamespic@gmail.com'],
                             fail_silently=False
                         )
+                
+                if hasattr(function, 'runner_config'):
+                    print function.runner_config
