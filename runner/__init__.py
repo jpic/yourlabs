@@ -1,6 +1,10 @@
+import traceback
+import sys
 import datetime
 
 from django.core.management import call_command
+from django.conf import settings
+from django.core.mail import send_mail
 
 from gsm.management.commands.gsm_sync import Command as GsmSyncCommand
 
@@ -32,8 +36,14 @@ class Runner(object):
                         function.__name__, e.message)
                     )
 
+                    exc_type, exc_value, exc_tb = sys.exc_info()
+                    tb = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+
                     self.exceptions[function.__name__].append({
                         'exception': e,
+                        'message': e.message,
+                        'class': e.__class__.__name__,
+                        'traceback': tb,
                         'datetime': datetime.datetime.now()
                     })
                     self.consecutive_exceptions[function.__name__] += 1
@@ -45,9 +55,29 @@ class Runner(object):
                             )
                         )
                    
-                    if self.consecutive_exceptions[function.__name__] > 5:
-                         self.logger.critical('%s might not even work anymore: failed %s times' % (
+                    if self.consecutive_exceptions[function.__name__] >= 5 and self.consecutive_exceptions[function.__name__] % 5 == 0:
+                        self.logger.critical('%s might not even work anymore: failed %s times' % (
                                 function.__name__, 
                                 self.consecutive_exceptions[function.__name__]
                             )
+                        )
+
+                        message = []
+                        for e in self.exceptions[function.__name__]:
+                            message.append('Message: ' + e['message'])
+                            message.append('Date/Time: ' + str(e['datetime']))
+                            message.append('Exception class: ' + e['class'])
+                            message.append('Traceback:')
+                            message.append(e['traceback'])
+                            message.append('')
+
+                        send_mail(
+                            '[%s] Has been failing for %s consecutive times' % (
+                                function.__name__,
+                                self.consecutive_exceptions[function.__name__]
+                            ),
+                            "\n".join(message),
+                            'critical@yourlabs.org',
+                            ['jamespic@gmail.com'],
+                            fail_silently=False
                         )
