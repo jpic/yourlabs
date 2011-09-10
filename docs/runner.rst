@@ -1,5 +1,5 @@
-Welcome to yourlabs.runner's documentation!
-===========================================
+yourlabs.runner
+===============
 
 It is frequent for projects to need commands to be executed continuously. When
 cron or spoolers aren't the way to go, runner provides a simple way to create

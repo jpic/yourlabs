@@ -10,6 +10,20 @@ Contents:
 
    runner
 
+Applications
+------------
+
+yourlabs.runner
+    It is frequent for projects to need commands to be executed continuously.
+    When cron or spoolers aren't the way to go, runner provides a simple way to
+    create background threads which chains commands continuously. For what it's
+    worth, it's partly documented and we use it in production.
+
+yourlabs.smoke
+    High level tests, like testing if a view returns status 200, are called
+    "smoke tests". This application makes creating complete smoke tests for all
+    possible urls in your project easy. It's not really ready for a end user.
+
 Install
 -------
 
@@ -22,19 +36,7 @@ yourlabs module. You can then install any application you like. For example,
 install the "runner" applications by adding to settings.INSTALLED_APPS:
 'yourlabs.runner'.
 
-Smoke
------
-
-High level tests, like testing if a view returns status 200, are called "smoke
-tests". This application makes creating complete smoke tests for all possible
-urls in your project easy.
-
-Runner
-------
-
-It is frequent for projects to need commands to be executed continuously. When
-cron or spoolers aren't the way to go, runner provides a simple way to create
-background threads which chains commands continuously.
+Note: you can hack directly in that repo.
 
 Indices and tables
 ==================
