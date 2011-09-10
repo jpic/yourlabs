@@ -61,7 +61,11 @@ Customize privileges
 
 Running the tasks under a particular user is easy in bash, for example::
 
-    su $username -c "source /srv/$domain/env/bin/activate && /srv/$domain/main/manage.py run_functions tasks.send_mail tasks.retry_deferred &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 5 /srv/$domain/main/manage.py run_functions \
+            tasks.send_mail \
+            tasks.retry_deferred \
+        &>> /srv/$domain/log/runner_debug_0 & disown"
 
 Customize process priority
 ``````````````````````````
@@ -69,8 +73,15 @@ Customize process priority
 This example shows how to give priority to the runner of `gsm_sync_live` over
 the `send_mail_retry_deferred` runner::
 
-    su $username -c "source /srv/$domain/env/bin/activate && nice -10 /srv/$domain/main/manage.py run_functions tasks.gsm_sync_live &>> /dev/null & disown"
-    su $username -c "source /srv/$domain/env/bin/activate && nice 15 /srv/$domain/main/manage.py run_functions tasks.send_mail tasks.retry_deferred &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 5 /srv/$domain/main/manage.py run_functions \
+            tasks.gsm_sync_live \
+    &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 15 /srv/$domain/main/manage.py run_functions \
+            tasks.send_mail \
+            tasks.retry_deferred \
+    &>> /dev/null & disown"
 
 To know more about process priorities and scheduling configuration, read the
 manual of the nice command used in this example.
