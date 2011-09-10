@@ -1,3 +1,4 @@
+import logging
 import time
 import traceback
 import signal
@@ -11,49 +12,65 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 class Runner(object):
-    def __init__(self, functions, logger, pidfile=None, killconcurrent=True):
+    def __init__(self, functions, logger, name=None, pidfile=None, killconcurrent=True):
         self.functions = functions
         self.logger = logger
         self.exceptions = {}
         self.consecutive_exceptions = {}
         self.killconcurrent = killconcurrent
+        self.name = name or '_'.join([f.__name__ for f in self.functions])
+        self.pidfile = pidfile or os.path.join(settings.RUN_ROOT, self.name + '.pid')
 
         for function in self.functions:
             self.exceptions[function.__name__] = []
             self.consecutive_exceptions[function.__name__] = 0
 
-        self.pidfile = pidfile
-        if self.pidfile is None:
-            self.pidfile = os.path.join(
-                settings.RUN_ROOT,
-                '_'.join([f.__name__ for f in self.functions]) + '.pid'
-            )
         self.concurrency_security()
+
+    def log(self, level, message, *args):
+        level = getattr(logging, level.upper())
+        self.logger.log(level, '[%s] ' % self.name + message % args)
 
     def concurrency_security(self):
         if os.path.exists(self.pidfile):
-            f = open(self.pidfile, 'r')
-            concurrent = f.read()
-            f.close()
+            try:
+                f = open(self.pidfile, 'r')
+                concurrent = f.read()
+                f.close()
+                self.log('debug', 
+                    'Found pidfile %s containing: %s', self.pidfile, concurrent)
+            except Exception:
+                self.log('error', 
+                    'Could not read pidfile %s', self.pidfile)
+
             if os.path.exists('/proc/%s' % concurrent):
                 if self.killconcurrent:
-                    print "Killing %s" % concurrent
-                    os.kill(int(concurrent), signal.SIGKILL)
+                    os.kill(int(concurrent), signal.SIGTERM)
+                    self.log('debug', 'Sent SIGTERM to: %s' % concurrent)
 
                     i = 0
                     while os.path.exists('/proc/%s' % concurrent):
-                        time.sleep(1)
-                        if i == 30:
-                            print "Error: Sent SIGKILL to pid %s 30 seconds ago, in vain"
+                        time.sleep(5)
+                        if i == 5:
+                            self.log('error', 
+                                'Exiting because concurrent PID %s is still there',
+                                concurrent)
                             os._exit(-1)
+                        else:
+                            self.log('debug', 
+                                '/proc/%s still exists, waiting another 5 seconds',
+                                concurrent)
                 else:
-                    print "Error: %s contains a pid (%s) which is still running !" % (
-                        self.pidfile,
-                        concurrent
-                    )
+                    self.log('error', 
+                        '%s contains a pid (%s) which is still running !',
+                        self.pidfile, concurrent)
                     os._exit(-1)
             else:
+                self.log('debug', 'Could not find /proc/%s', concurrent)
                 os.remove(self.pidfile)
+        else:
+            self.log('debug', 
+                'Did not find pidfile %s, continuing normally', self.pidfile)
 
         f = open(self.pidfile, 'w')
         f.write(str(os.getpid()))
@@ -65,22 +82,24 @@ class Runner(object):
     def run(self):
         while True:
             for function in self.functions:
-                self.logger.debug('Endless loop start')
+                self.log('debug', 'Endless loop start')
 
                 try:
-                    self.logger.info('Started %s' % function.__name__)
+                    self.log('debug', 'Started %s', function.__name__)
                     function()
                     # it should have not crashed
                     self.consecutive_exceptions[function.__name__] = 0
-                    self.logger.info('Ended with success %s' % function.__name__)
+                    self.log('info', 
+                        'Task executed without raising an exception: %s', 
+                        function.__name)
                 except Exception as e:
-                    self.logger.warning(
-                        'Exception caught running %s with message: %s' % (
+                    self.log('warning',
+                        'Exception caught running %s with message: %s',
                         function.__name__, e.message)
-                    )
 
                     exc_type, exc_value, exc_tb = sys.exc_info()
-                    tb = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+                    tb = ''.join(
+                        traceback.format_exception(exc_type, exc_value, exc_tb))
 
                     self.exceptions[function.__name__].append({
                         'exception': e,
@@ -92,18 +111,15 @@ class Runner(object):
                     self.consecutive_exceptions[function.__name__] += 1
 
                     if self.consecutive_exceptions[function.__name__] > 1:
-                        self.logger.error('%s failed %s times' % (
-                                function.__name__, 
-                                self.consecutive_exceptions[function.__name__]
-                            )
-                        )
+                        self.log('error', '%s failed %s times', function.__name__, 
+                            self.consecutive_exceptions[function.__name__])
                    
-                    if self.consecutive_exceptions[function.__name__] >= 5 and self.consecutive_exceptions[function.__name__] % 5 == 0:
-                        self.logger.critical('%s might not even work anymore: failed %s times' % (
+                    if self.consecutive_exceptions[function.__name__] >= 5 and \
+                       self.consecutive_exceptions[function.__name__] % 5 == 0:
+                        self.log('critical', 
+                            '%s might not even work anymore: failed %s times',
                                 function.__name__, 
-                                self.consecutive_exceptions[function.__name__]
-                            )
-                        )
+                                self.consecutive_exceptions[function.__name__])
 
                         message = []
                         for e in self.exceptions[function.__name__]:
