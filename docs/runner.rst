@@ -106,8 +106,8 @@ Otherwise:
 Note that it will mail admins, with all the consecutive exceptions and
 traceback, whenever it logs a critical message.
 
-Runner process management
-`````````````````````````
+Concurrency handling
+````````````````````
 
 Each runner will create a pidfile in `RUN_ROOT`, for example
 `PROJECT_ROOT/var/run/send_mail_retry_deferred.pid` for `run_functions
@@ -122,6 +122,10 @@ When a runner starts, it checks if a pidfile exists and unless option
 any. Anyway, it will delete and re-create the pidfile with the actual pid.
 
 This is implemented in the `runner.Runner.concurrency_security` method.
+
+However, if a concurrent runner checks for the pidfile **before** the other one
+writes it, then it will result in concurrent processes. That should only happen
+during stress tests.
 
 Advocacy
 --------
