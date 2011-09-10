@@ -8,8 +8,10 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+   runner
+
 Install
-=======
+-------
 
 There is one repo for all apps, which is install easy to install::
 
@@ -21,14 +23,14 @@ install the "runner" applications by adding to settings.INSTALLED_APPS:
 'yourlabs.runner'.
 
 Smoke
-=====
+-----
 
 High level tests, like testing if a view returns status 200, are called "smoke
 tests". This application makes creating complete smoke tests for all possible
 urls in your project easy.
 
 Runner
-======
+------
 
 It is frequent for projects to need commands to be executed continuously. When
 cron or spoolers aren't the way to go, runner provides a simple way to create
