@@ -75,8 +75,13 @@ This example shows how to give priority to the runner of "gsm_sync_live" over
 To know more about process priorities and scheduling configuration, read the
 manual of the nice command used in this example.
 
+Maintenance
+-----------
+
+One of the main goals of yourlabs.runner is to require as low maintenance as possible.
+
 Monitoring
-----------
+``````````
 
 A runner resets a task's consecutive executions counter when it succeedes. Otherwise:
 
@@ -87,7 +92,7 @@ A runner resets a task's consecutive executions counter when it succeedes. Other
 Note that it will mail admins, with all the consecutive exceptions and traceback, whenever it logs a critical message.
 
 Runner process management
--------------------------
+`````````````````````````
 
 Each runner will create a pidfile in RUN_ROOT, for example
 PROJECT_ROOT/var/run/send_mail_retry_deferred.pid for `run_functions
