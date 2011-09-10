@@ -10,8 +10,6 @@ from django.core.management import call_command
 from django.conf import settings
 from django.core.mail import send_mail
 
-from gsm.management.commands.gsm_sync import Command as GsmSyncCommand
-
 class Runner(object):
     def __init__(self, functions, logger, pidfile=None, killconcurrent=True):
         self.functions = functions
