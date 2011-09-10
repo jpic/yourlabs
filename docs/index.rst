@@ -32,10 +32,10 @@ There is one small repo for all apps, which is install easy to install::
 
     pip install -e git+git@github.com:yourlabs/yourlabs.git#egg=yourlabs
 
-This will clone the repo in your-python-env/src/yourlabs and install the
+This will clone the repo in `your-python-env/src/yourlabs` and install the
 yourlabs module. You can then install any application you like. For example,
-install the "runner" applications by adding to settings.INSTALLED_APPS:
-'yourlabs.runner'.
+install the "runner" applications by adding to `settings.INSTALLED_APPS`:
+`'yourlabs.runner'`.
 
 Note: you can hack directly in that repo.
 
