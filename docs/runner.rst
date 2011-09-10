@@ -27,7 +27,7 @@ root contained such a tasks.py file::
         call_command('send_mail')
 
 Task chains
------------
+```````````
 
 It can continuously run any number of tasks in the specified order::
 
@@ -36,7 +36,7 @@ It can continuously run any number of tasks in the specified order::
 The advantage of splitting tasks is monitoring and error reporting.
 
 Cooldown time
--------------
+`````````````
 
 A "cooldown" time should be adjusted in each task, on each server, to balance
 between getting the job done and being resource-reasonnable, is easy with
@@ -52,14 +52,14 @@ time.sleep::
         time.sleep(5*60)
 
 Customize privileges
---------------------
+````````````````````
 
 Running the tasks under a particular user is easy in bash, for example::
 
     su $username -c "source /srv/$domain/env/bin/activate && /srv/$domain/main/manage.py run_functions tasks.send_mail tasks.retry_deferred &>> /dev/null & disown"
 
 Customize process priority
---------------------------
+``````````````````````````
 
 This example shows how to give priority to the runner of "gsm_sync_live" over
 "-end_mail"::
