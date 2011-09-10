@@ -3,7 +3,8 @@ Welcome to yourlabs's documentation!
 
 This repo contains various Django *super simple* applications we use internally.
 
-Contents:
+You want to read this page before using the following application specific
+documentation shortcuts:
 
 .. toctree::
    :maxdepth: 2
