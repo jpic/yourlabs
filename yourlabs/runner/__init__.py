@@ -24,9 +24,9 @@ class Runner(object):
 
         self.pidfile = pidfile
         if self.pidfile is None:
-            self.pidfile = '%s/%s.pid' % (
+            self.pidfile = os.path.join(
                 settings.RUN_ROOT,
-                '_'.join([f.__name__ for f in self.functions])
+                '_'.join([f.__name__ for f in self.functions]) + '.pid'
             )
         self.concurrency_security()
 
@@ -124,6 +124,3 @@ class Runner(object):
                             ['jamespic@gmail.com'],
                             fail_silently=False
                         )
-                
-                if hasattr(function, 'runner_config'):
-                    print function.runner_config
