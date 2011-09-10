@@ -11,6 +11,11 @@ Install
 This app just provides a command: add 'yourlabs.runner' in your project's
 settings.INSTALLED_APPS.
 
+Also, runner expects the following settings:
+
+    - settings.LOGGING['loggers']['runner']: your logger config
+    - settings.RUN_ROOT: the path where it should create it's pidfiles
+
 Usage
 -----
 
@@ -69,6 +74,34 @@ This example shows how to give priority to the runner of "gsm_sync_live" over
 
 To know more about process priorities and scheduling configuration, read the
 manual of the nice command used in this example.
+
+Monitoring
+----------
+
+A runner resets a task's consecutive executions counter when it succeedes. Otherwise:
+
+- it logs the failure with a warning
+- if it's not the first time it will log an error
+- or if there were a multiple of 5 consecutive failures (5, 10, 15, etc, etc ..) it will log a critical
+
+Note that it will mail admins, with all the consecutive exceptions and traceback, whenever it logs a critical message.
+
+Runner process management
+-------------------------
+
+Each runner will create a pidfile in RUN_ROOT, for example
+PROJECT_ROOT/var/run/send_mail_retry_deferred.pid for `run_functions
+tasks.send_mail tasks.retry_deferred` if RUN_ROOT is set to `PROJECT_ROOT +
+'/var/run/`
+
+The runner doesn't even attempt to delete its pidfile on exit. It keeps in mind
+that a dead pidfile might be left for example after a power outage.
+
+When a runner starts, it checks if a pidfile exists and unless option
+killconcurrent is set to file, it will attempt to kill the existing process if
+any. Anyway, it will delete and re-create the pidfile with the actual pid.
+
+This is implemented in the runner.Runner.concurrency_security method.
 
 Advocacy
 --------
