@@ -7,7 +7,7 @@ You want to read this page before using the following application specific
 documentation shortcuts:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
    runner
 
@@ -28,7 +28,7 @@ yourlabs.smoke
 Install
 -------
 
-There is one repo for all apps, which is install easy to install::
+There is one small repo for all apps, which is install easy to install::
 
     pip install -e git+git@github.com:yourlabs/yourlabs.git#egg=yourlabs
 
