@@ -83,46 +83,48 @@ class Runner(object):
         while True:
             for function in self.functions:
                 self.log('debug', 'Endless loop start')
+                name = function.__name__
 
                 try:
-                    self.log('debug', 'Started %s', function.__name__)
+                    self.log('debug', 'Started %s', name)
                     function()
                     # it should have not crashed
-                    self.consecutive_exceptions[function.__name__] = 0
+                    self.consecutive_exceptions[name] = 0
                     self.log('info', 
                         'Task executed without raising an exception: %s', 
-                        function.__name)
+                        name)
                 except Exception as e:
                     self.log('warning',
                         'Exception caught running %s with message: %s',
-                        function.__name__, e.message)
+                        name, e.message)
 
                     exc_type, exc_value, exc_tb = sys.exc_info()
-                    tb = ''.join(
-                        traceback.format_exception(exc_type, exc_value, exc_tb))
+                    tb = traceback.format_exception(exc_type, exc_value, exc_tb)
+                    for line in tb:
+                        self.log('debug', line)
 
-                    self.exceptions[function.__name__].append({
+                    self.exceptions[name].append({
                         'exception': e,
                         'message': e.message,
                         'class': e.__class__.__name__,
-                        'traceback': tb,
+                        'traceback': ''.join(tb),
                         'datetime': datetime.datetime.now()
                     })
-                    self.consecutive_exceptions[function.__name__] += 1
+                    self.consecutive_exceptions[name] += 1
 
-                    if self.consecutive_exceptions[function.__name__] > 1:
-                        self.log('error', '%s failed %s times', function.__name__, 
-                            self.consecutive_exceptions[function.__name__])
+                    if self.consecutive_exceptions[name] > 1:
+                        self.log('error', '%s failed %s times', name, 
+                            self.consecutive_exceptions[name])
                    
-                    if self.consecutive_exceptions[function.__name__] >= 5 and \
-                       self.consecutive_exceptions[function.__name__] % 5 == 0:
+                    if self.consecutive_exceptions[name] >= 5 and \
+                       self.consecutive_exceptions[name] % 5 == 0:
                         self.log('critical', 
                             '%s might not even work anymore: failed %s times',
-                                function.__name__, 
-                                self.consecutive_exceptions[function.__name__])
+                                name, 
+                                self.consecutive_exceptions[name])
 
                         message = []
-                        for e in self.exceptions[function.__name__]:
+                        for e in self.exceptions[name]:
                             message.append('Message: ' + e['message'])
                             message.append('Date/Time: ' + str(e['datetime']))
                             message.append('Exception class: ' + e['class'])
@@ -132,8 +134,8 @@ class Runner(object):
 
                         send_mail(
                             '[%s] Has been failing for %s consecutive times' % (
-                                function.__name__,
-                                self.consecutive_exceptions[function.__name__]
+                                name,
+                                self.consecutive_exceptions[name]
                             ),
                             "\n".join(message),
                             'critical@yourlabs.org',
