@@ -106,6 +106,17 @@ Otherwise:
 Note that it will mail admins, with all the consecutive exceptions and
 traceback, whenever it logs a critical message.
 
+For each consecutive failure, such a report is appended to the administrator email message::
+
+    Message: 'function' object has no attribute '_Runner__name'
+    Date/Time: 2011-09-10 20:59:44.518869
+    Exception class: AttributeError
+    Traceback:
+    Traceback (most recent call last):
+     File "/srv/bet_prod/bet_prod_env/src/yourlabs/yourlabs/runner/__init__.py", line 94, in run
+       function.__name)
+    AttributeError: 'function' object has no attribute '_Runner__name'
+
 Concurrency handling
 ````````````````````
 
