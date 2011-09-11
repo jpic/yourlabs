@@ -138,15 +138,42 @@ However, if a concurrent runner checks for the pidfile **before** the other one
 writes it, then it will result in concurrent processes. That should only happen
 during stress tests.
 
-Advocacy
---------
+::
 
-Why make runner when there is cron ?
-  Some tasks can take a while. And if the cron was every 24H hours and one day
-  the task takes 24H, then the task would occupate two processes during an
-  hour. We didn't want our tasks to run into race conditions. Also, if the task
-  ends up taking 12H then we want it run twice in 24H.
+    <<< 22:50.31 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12456 E:130 S:1 G:master bet_prod_env
+    >>> source ../local && start_runner
+    Starting run_functions tasks.gsm_sync tasks.update_index                                                                                                               Starting run_functions tasks.gsm_sync_live
+    Starting run_functions tasks.send_mail tasks.retry_deferred
+    <<< 22:50.33 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12462 S:1 G:master bet_prod_env
+    >>> ps aux | grep run_functions
+    bet_prod 24499  2.3  1.2  33744 25644 pts/3    SN   22:46   0:05 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index                   bet_prod 24502  7.5  1.2  34128 26092 pts/3    SN   22:46   0:18 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24505  0.7  1.2  32568 24412 pts/3    SN   22:46   0:01 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    bet_prod 24626 18.0  0.3  12328  7072 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24629 57.0  0.6  17536 12380 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24632  2.0  0.1   6624  2920 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    root     24639  0.0  0.0   4408   836 pts/3    S+   22:50   0:00 grep run_functions
+    <<< 22:50.34 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12463 S:1 G:master bet_prod_env
+    >>> ps aux | grep run_functions 
+    bet_prod 24626 15.1  1.2  32868 24808 pts/3    RN   22:50   0:02 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24629 17.6  1.2  33804 25876 pts/3    SN   22:50   0:02 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24632 13.8  1.2  32564 24412 pts/3    SN   22:50   0:01 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    root     24663  0.0  0.0   4408   836 pts/3    S+   22:50   0:00 grep run_functions
 
-Why not background the task in a spooler like uWSGI, celery, ztask ... ?
-  Using a spooler to have some tasks run continuously is like using a rock to
-  sharpen a stick.
+
+Historical context
+------------------
+
+A project needs to continuously run tasks (duh!). Several chains of API calls
+must to be done with different intervals, to ensure a balance between data
+freshness and performance. Needless to say, this is a mission critical task.
+
+The first attempt was using threads but it turned out everything had to be done
+to have sane monitoring. First i implemented exception handling in one task.
+Then, refactored it to use it in another task.
+
+runner.Runner was born. However, it did not make sense to carry the weight of
+thread management anymore. The command run_functions was born. It really looked
+handy and it was a sunny day so it was open sourced.
