@@ -134,21 +134,30 @@ any. Anyway, it will delete and re-create the pidfile with the actual pid.
 
 This is implemented in the `runner.Runner.concurrency_security` method.
 
-However, if a concurrent runner checks for the pidfile **before** the other one
-writes it, then it will result in concurrent processes. That should only happen
-during stress tests.
+.. danger::
+    If a concurrent runner checks for the pidfile **before** the other one
+    writes it, then it will result in concurrent processes which has no pidfile. 
 
-::
+Upgrading processes
+```````````````````
+
+Starting the same queues again and waiting a few seconds results in a process
+upgrade, a feature from concurrency handling. The queues will naturally be
+replaced by the new code (from your tasks or in runner itself).
+
+Example process upgrade using a shell script::
 
     <<< 22:50.31 Sun Sep 11 2011!~bet_prod/main 
     <<< root@tina!12456 E:130 S:1 G:master bet_prod_env
     >>> source ../local && start_runner
-    Starting run_functions tasks.gsm_sync tasks.update_index                                                                                                               Starting run_functions tasks.gsm_sync_live
+    Starting run_functions tasks.gsm_sync tasks.update_index
+    Starting run_functions tasks.gsm_sync_live
     Starting run_functions tasks.send_mail tasks.retry_deferred
     <<< 22:50.33 Sun Sep 11 2011!~bet_prod/main 
     <<< root@tina!12462 S:1 G:master bet_prod_env
     >>> ps aux | grep run_functions
-    bet_prod 24499  2.3  1.2  33744 25644 pts/3    SN   22:46   0:05 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index                   bet_prod 24502  7.5  1.2  34128 26092 pts/3    SN   22:46   0:18 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24499  2.3  1.2  33744 25644 pts/3    SN   22:46   0:05 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24502  7.5  1.2  34128 26092 pts/3    SN   22:46   0:18 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
     bet_prod 24505  0.7  1.2  32568 24412 pts/3    SN   22:46   0:01 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
     bet_prod 24626 18.0  0.3  12328  7072 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
     bet_prod 24629 57.0  0.6  17536 12380 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
