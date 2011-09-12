@@ -61,7 +61,11 @@ Customize privileges
 
 Running the tasks under a particular user is easy in bash, for example::
 
-    su $username -c "source /srv/$domain/env/bin/activate && /srv/$domain/main/manage.py run_functions tasks.send_mail tasks.retry_deferred &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 5 /srv/$domain/main/manage.py run_functions \
+            tasks.send_mail \
+            tasks.retry_deferred \
+        &>> /srv/$domain/log/runner_debug_0 & disown"
 
 Customize process priority
 ``````````````````````````
@@ -69,8 +73,15 @@ Customize process priority
 This example shows how to give priority to the runner of `gsm_sync_live` over
 the `send_mail_retry_deferred` runner::
 
-    su $username -c "source /srv/$domain/env/bin/activate && nice -10 /srv/$domain/main/manage.py run_functions tasks.gsm_sync_live &>> /dev/null & disown"
-    su $username -c "source /srv/$domain/env/bin/activate && nice 15 /srv/$domain/main/manage.py run_functions tasks.send_mail tasks.retry_deferred &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 5 /srv/$domain/main/manage.py run_functions \
+            tasks.gsm_sync_live \
+    &>> /dev/null & disown"
+    su $username -c "source /srv/$domain/env/bin/activate && \
+        nice -n 15 /srv/$domain/main/manage.py run_functions \
+            tasks.send_mail \
+            tasks.retry_deferred \
+    &>> /dev/null & disown"
 
 To know more about process priorities and scheduling configuration, read the
 manual of the nice command used in this example.
@@ -95,8 +106,19 @@ Otherwise:
 Note that it will mail admins, with all the consecutive exceptions and
 traceback, whenever it logs a critical message.
 
-Runner process management
-`````````````````````````
+For each consecutive failure, such a report is appended to the administrator email message::
+
+    Message: 'function' object has no attribute '_Runner__name'
+    Date/Time: 2011-09-10 20:59:44.518869
+    Exception class: AttributeError
+    Traceback:
+    Traceback (most recent call last):
+     File "/srv/bet_prod/bet_prod_env/src/yourlabs/yourlabs/runner/__init__.py", line 94, in run
+       function.__name)
+    AttributeError: 'function' object has no attribute '_Runner__name'
+
+Concurrency handling
+````````````````````
 
 Each runner will create a pidfile in `RUN_ROOT`, for example
 `PROJECT_ROOT/var/run/send_mail_retry_deferred.pid` for `run_functions
@@ -112,15 +134,55 @@ any. Anyway, it will delete and re-create the pidfile with the actual pid.
 
 This is implemented in the `runner.Runner.concurrency_security` method.
 
-Advocacy
---------
+.. danger::
+    If a concurrent runner checks for the pidfile **before** the other one
+    writes it, then it will result in concurrent processes which has no pidfile. 
 
-Why make runner when there is cron ?
-  Some tasks can take a while. And if the cron was every 24H hours and one day
-  the task takes 24H, then the task would occupate two processes during an
-  hour. We didn't want our tasks to run into race conditions. Also, if the task
-  ends up taking 12H then we want it run twice in 24H.
+Upgrading processes
+```````````````````
 
-Why not background the task in a spooler like uWSGI, celery, ztask ... ?
-  Using a spooler to have some tasks run continuously is like using a rock to
-  sharpen a stick.
+Starting the same queues again and waiting a few seconds results in a process
+upgrade, a feature from concurrency handling. The queues will naturally be
+replaced by the new code (from your tasks or in runner itself).
+
+Example process upgrade using a shell script::
+
+    <<< 22:50.31 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12456 E:130 S:1 G:master bet_prod_env
+    >>> source ../local && start_runner
+    Starting run_functions tasks.gsm_sync tasks.update_index
+    Starting run_functions tasks.gsm_sync_live
+    Starting run_functions tasks.send_mail tasks.retry_deferred
+    <<< 22:50.33 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12462 S:1 G:master bet_prod_env
+    >>> ps aux | grep run_functions
+    bet_prod 24499  2.3  1.2  33744 25644 pts/3    SN   22:46   0:05 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24502  7.5  1.2  34128 26092 pts/3    SN   22:46   0:18 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24505  0.7  1.2  32568 24412 pts/3    SN   22:46   0:01 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    bet_prod 24626 18.0  0.3  12328  7072 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24629 57.0  0.6  17536 12380 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24632  2.0  0.1   6624  2920 pts/3    RN   22:50   0:00 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    root     24639  0.0  0.0   4408   836 pts/3    S+   22:50   0:00 grep run_functions
+    <<< 22:50.34 Sun Sep 11 2011!~bet_prod/main 
+    <<< root@tina!12463 S:1 G:master bet_prod_env
+    >>> ps aux | grep run_functions 
+    bet_prod 24626 15.1  1.2  32868 24808 pts/3    RN   22:50   0:02 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync tasks.update_index
+    bet_prod 24629 17.6  1.2  33804 25876 pts/3    SN   22:50   0:02 python /srv/bet_prod/main/manage.py run_functions tasks.gsm_sync_live
+    bet_prod 24632 13.8  1.2  32564 24412 pts/3    SN   22:50   0:01 python /srv/bet_prod/main/manage.py run_functions tasks.send_mail tasks.retry_deferred
+    root     24663  0.0  0.0   4408   836 pts/3    S+   22:50   0:00 grep run_functions
+
+
+Historical context
+------------------
+
+A project needs to continuously run tasks (duh!). Several chains of API calls
+must to be done with different intervals, to ensure a balance between data
+freshness and performance. Needless to say, this is a mission critical task.
+
+The first attempt was using threads but it turned out everything had to be done
+to have sane monitoring. First i implemented exception handling in one task.
+Then, refactored it to use it in another task.
+
+runner.Runner was born. However, it did not make sense to carry the weight of
+thread management anymore. The command run_functions was born. It really looked
+handy and it was a sunny day so it was open sourced.
