@@ -14,7 +14,7 @@ This app just provides a command: add `yourlabs.runner` in your project's
 Also, runner expects the following settings:
 
     - `settings.LOGGING['loggers']['runner']`: your logger config
-    - `settings.RUN_ROOT`: the path where it should create it's pidfiles
+    - `settings.RUN_ROOT`: the path where it should create its pidfiles
 
 Usage
 -----
@@ -43,18 +43,25 @@ The advantage of splitting tasks is monitoring and error reporting.
 Cooldown time
 `````````````
 
+After a function is run, runner can wait a little: the `cooldown`. For example,
+for your database server to flush and so on.
+
 A `cooldown` time should be adjusted in each task, on each server, to balance
 between getting the job done and being resource-reasonnable, is easy with
-`time.sleep`::
+the runner.task decorator::
 
     import time
+    from datetime import timedelta as td
     
     from django.core.management import call_command
+    
+    from yourlabs import runner
 
+    # wait 15 minutes after a successfull execution
+    # and wait 30 minutes after a failed execution
+    @runner.task(success_cooldown=td(minutes=15), fail_cooldown=td(minutes=30))
     def send_mail():
         call_command('send_mail')
-        # 5 minutes cooldown
-        time.sleep(5*60)
 
 Customize privileges
 ````````````````````
@@ -92,30 +99,66 @@ Maintenance
 One of the main goals of `yourlabs.runner` is to require as low maintenance as
 possible.
 
-Monitoring
-``````````
+Admin Emails
+````````````
 
-A runner resets a task's consecutive executions counter when it succeedes.
-Otherwise:
+When a task started failing every time, i received around 750 emails because it
+was the weekend. So I've been very carefull to make email notifications throttlable.
 
-- it logs the failure with a `warning`
-- if it's not the first time it will log an error, it will log an `error`
-- or if there were a multiple of 5 consecutive failures (5, 10, 15, etc, etc
-  ..) it will log a `critical`
+Because a failure can come from a code update: the admin is emailed on the
+first execution failure. The admin also receives an email when a **new**
+exception is thrown. An exception is **new** if this process hasn't notified
+the admin about it yet.
 
-Note that it will mail admins, with all the consecutive exceptions and
-traceback, whenever it logs a critical message.
+After a  failure, it will notify the admin after the process downtime is
+superior to the `non_recoverable_downtime` option. Is is important to set this
+option according to possible network errors that would cause a task to fail.
 
-For each consecutive failure, such a report is appended to the administrator email message::
+If a process is stuck in a failure, then it will notify the admin everytime
+`non_recoverable_downtime` is reached, to make sure there is an email stuck at
+the top of his inbox, without spamming it. In practice, 6 or 12 hours is a
+reasonnable setting for `non_recoverable_downtime`.
 
-    Message: 'function' object has no attribute '_Runner__name'
-    Date/Time: 2011-09-10 20:59:44.518869
-    Exception class: AttributeError
-    Traceback:
-    Traceback (most recent call last):
-     File "/srv/bet_prod/bet_prod_env/src/yourlabs/yourlabs/runner/__init__.py", line 94, in run
-       function.__name)
-    AttributeError: 'function' object has no attribute '_Runner__name'
+Example
+```````
+
+An example task, `yourlabs.runner.tasks.divide_by_zero`, is configured for a
+`fail_cooldown` of 1 second, and a `non_recoverable_downtime` of 3 seconds::
+
+    >>> ./manage.py run_functions yourlabs.runner.tasks.divide_by_zero
+    [yourlabs] Could not find your project root, not setting up
+    [yourlabs] Setting PROJECT_ROOT: /srv/bet.yourlabs.org/main
+    DEBUG Found pidfile divide_by_zero containing: 13698
+    DEBUG Could not find /proc/13698, wiping pidfile divide_by_zero
+    DEBUG Wrote pidfile divide_by_zero
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sent email to admins: First exception caught: integer division or modulo by zero
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sent email to admins: Non recoverable downtime reached
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sent email to admins: Non recoverable downtime reached again
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sent email to admins: Non recoverable downtime reached again
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
+    DEBUG [divide_by_zero] Execution failed
+    DEBUG [divide_by_zero] Sleeping 1 seconds
 
 Concurrency handling
 ````````````````````

@@ -14,7 +14,7 @@ class Daemon(object):
         elif isinstance(self.logger, str):
             self.logger = logging.getLogger(self.logger)
         level = getattr(logging, level.upper())
-        self.logger.log(level, '[%s] ' % self.name + message % args)
+        self.logger.log(level, message % args)
     
     def concurrency_security(self):
         if os.path.exists(self.pidfile):
@@ -51,7 +51,8 @@ class Daemon(object):
                         self.pidfile, concurrent)
                     os._exit(-1)
             else:
-                self.log('debug', 'Could not find /proc/%s', concurrent)
+                self.log('debug', 'Could not find /proc/%s, wiping pidfile %s', 
+                        concurrent, self.pidfile)
                 os.remove(self.pidfile)
         else:
             self.log('debug', 
@@ -63,3 +64,4 @@ class Daemon(object):
         # Forcibly sync disk
         os.fsync(f.fileno())
         f.close()
+        self.log('debug', 'Wrote pidfile %s', self.pidfile)

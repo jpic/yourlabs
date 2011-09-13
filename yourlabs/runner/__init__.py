@@ -28,17 +28,21 @@ class TaskRunner(daemon.Daemon):
             module = import_module(module)
             function = getattr(module, function)
             
-            self.functions.append(task()(function))
+            if not hasattr(function, 'runner_task'):
+                function = task()(function)
+            self.functions.append(function)
             names.append(function.__name__)
 
         if pidfile is None:
             pidfile = '_'.join(names)
 
         super(TaskRunner, self).__init__(pidfile, logger, allow_concurrent)
+        self.concurrency_security()
 
     def run(self):
-        for function in self.functions:
-            function.runner_task.run()
+        while True:
+            for function in self.functions:
+                function.runner_task.run()
 
 def task(**options):
     def wrapper(f):
@@ -47,6 +51,11 @@ def task(**options):
     return wrapper
 
 class Task(object):
+    FIRST_EXCEPTION = 1
+    NEW_EXCEPTION = 2
+    NON_RECOVERABLE_DOWNTIME_REACHED = 3
+    NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN = 4
+
     def __init__(self, function, **options):
         self.function = function
         self.name = self.function.__name__
@@ -67,6 +76,10 @@ class Task(object):
         self.admin_emails = []
 
     def log(self, level, message, *args):
+        if self.logger is None:
+            print level, self.name, self.message % args
+        elif isinstance(self.logger, str):
+            self.logger = logging.getLogger(self.logger)
         level = getattr(logging, level.upper())
         self.logger.log(level, '[%s] ' % self.name + message % args)
 
@@ -79,12 +92,13 @@ class Task(object):
         except Exception as e:
             ended = datetime.datetime.now()
             exc_type, exc_value, exc_tb = sys.exc_info()
-            self.fail(started, ended, e, exc_type, exc_value, exc_tb)
+            self.fail(started, ended, exc_type, exc_value, exc_tb)
 
     def success(self, started, ended):
+        self.log('debug', 'Execution successfull')
         self.exceptions.append(self.consecutive_exceptions)
         self.consecutive_exceptions = []
-        time.sleep(self.options['success_cooldown'])
+        time.sleep(self.options['success_cooldown'].seconds)
 
     def fail(self, started, ended, exc_type, exc_value, exc_tb):
         """
@@ -98,11 +112,13 @@ class Task(object):
           email stays in the top of the admin's mailbox
         """
         
+        self.log('debug', 'Execution failed')
         data = {
             'started': started,
             'ended': ended,
             'duration': started - ended,
         }
+        notify_admins = False
 
         if len(self.consecutive_exceptions):
             data['downsince'] = self.consecutive_exceptions[0]['started']
@@ -127,6 +143,7 @@ class Task(object):
                 'exc_value': exc_value,
                 'exc_tb': exc_tb,
                 'downsince': ended,
+                'downtime': ended-started,
             })
 
         self.exceptions.append(data)
@@ -143,9 +160,9 @@ class Task(object):
             
             if new:
                 notify_admins = Task.NEW_EXCEPTION
-            elif data['downsince'] >= self.options['non_recoverable_downtime']:
+            elif data['downtime'] >= self.options['non_recoverable_downtime']:
                 last_downtime_email = None
-                for email in self.admin_emails:
+                for email in reversed(self.admin_emails):
                     downtime_reasons = (
                         Task.NON_RECOVERABLE_DOWNTIME_REACHED, 
                         Task.NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN
@@ -156,29 +173,35 @@ class Task(object):
 
                 if not last_downtime_email:
                     notify_admins = Task.NON_RECOVERABLE_DOWNTIME_REACHED
-                elif last_downtime_email + self.options['non_recoverable_downtime'] > datetime.datetime.now():
+                elif last_downtime_email + self.options['non_recoverable_downtime'] < datetime.datetime.now():
                     notify_admins = Task.NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN
 
         if notify_admins:
             self.notify_admins(data, notify_admins)
-        time.sleep(self.options['fail_cooldown'])
+
+        self.log('debug', 'Sleeping %s seconds' % 
+            self.options['fail_cooldown'].seconds)
+        time.sleep(self.options['fail_cooldown'].seconds)
 
     def notify_admins(self, data, reason):
+        exc_type, exc_value, exc_tb = self.get_exception_data_for(data)
+
         if reason == Task.FIRST_EXCEPTION:
-            suject = 'First exception caught: %s' % data['exc_value'].message
+            subject = 'First exception caught: %s' % exc_value.message
         elif reason == Task.NEW_EXCEPTION:
-            subject = 'New exception caught: %s' % data['exc_value'].message
+            subject = 'New exception caught: %s' % exc_value.message
         elif reason == Task.NON_RECOVERABLE_DOWNTIME_REACHED:
             subject = 'Non recoverable downtime reached'
         elif reason == Task.NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN:
-            suject = 'Non recoverable downtime reached again'
+            subject = 'Non recoverable downtime reached again'
 
         message = ['Current state details:']
-        message.append('Down since', data['downsince'])
-        message.append('Down time', data['downtime'])
-        message.append('Exception', data['exc_value'].__class__.__name__)
-        message.append('Message', data['exc_value'].message)
-        message.append(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
+        message.append('Down since  %s' % data['downsince'])
+        message.append('Down time  %s' % data['downtime'])
+        message.append('Exception  %s' % exc_value.__class__.__name__)
+        message.append('Message  %s' % exc_value.message)
+        message.append(''.join(traceback.format_exception(
+            exc_type, exc_value, exc_tb)))
 
         message.append('')
         message.append('')
@@ -188,6 +211,9 @@ class Task(object):
             
             detailed = []
             for data in self.exceptions:
+                if 'exc_value' not in data.keys():
+                    continue
+
                 new = True
 
                 for detailed_data in detailed:
@@ -198,9 +224,10 @@ class Task(object):
                 
                 if new:
                     message.append('')
-                    message.append('Exception', data['exc_value'].__class__.__name__)
-                    message.append('Message', data['exc_value'].message)
-                    message.append(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
+                    message.append('Exception  %s' % data['exc_value'].__class__.__name__)
+                    message.append('Message  %s' % data['exc_value'].message)
+                    message.append(''.join(traceback.format_exception(
+                        data['exc_type'], data['exc_value'], data['exc_tb'])))
 
         send_mail(
             '[%s] %s' % (
@@ -213,12 +240,31 @@ class Task(object):
             fail_silently=False
         )
 
+        self.admin_emails.append({
+            'reason': reason,
+            'datetime': datetime.datetime.now()
+        })
+
+        self.log('debug', 'Sent email to admins: %s', subject)
+
     def is_same_exception(self, exc_type, exc_value, exc_tb, data):
         tb = traceback.format_exception(exc_type, exc_value, exc_tb)
+        tb2 =traceback.format_exception(
+                data['exc_type'], data['exc_value'], data['exc_tb'])
+
         if exc_type != data['exc_type']:
             return False
         if exc_value.message != data['exc_value'].message:
             return False
-        if ''.join(tb) != data['traceback']:
+        if ''.join(tb) != ''.join(tb2):
             return False
         return True
+    
+    def get_exception_data_for(self, data):
+        if 'exc_tb' in data.keys():
+            return (data['exc_type'], data['exc_value'], data['exc_tb'])
+
+        for logged_data in reversed(self.consecutive_exceptions):
+            if 'exc_tb' in logged_data.keys():
+                return (logged_data['exc_type'], logged_data['exc_value'], 
+                        logged_data['exc_tb'])
