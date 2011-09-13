@@ -69,9 +69,10 @@ class Setup(object):
         s['TEMPLATE_DEBUG'] = value
 
         if not value:
-            for k, v in self.debug_settings():
+            for k, v in self.debug_settings().items():
                 for x in v:
-                    s[k].pop(s[k].index(x))
+                    if x in v:
+                        s[k].pop(v.index(x))
 
     def full(self):
         self.defaults()
