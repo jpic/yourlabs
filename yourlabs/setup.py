@@ -28,8 +28,12 @@ class Setup(object):
         if 'PROJECT_ROOT' in settings.keys():
             self.PROJECT_ROOT = settings['PROJECT_ROOT']
         elif 'DJANGO_SETTINGS_MODULE' in os.environ:
-            self.settings_module = import_module(
-                os.environ['DJANGO_SETTINGS_MODULE'])
+            try:
+                self.settings_module = import_module(
+                    os.environ['DJANGO_SETTINGS_MODULE'])
+            except ImportError:
+                self.settings_module = import_module('settings')
+                
             if hasattr(self.settings_module, '__path__'):
                 self.PROJECT_ROOT = os.path.abspath(
                     self.settings_module.__path__)
