@@ -18,12 +18,16 @@ yourlabs.runner
     It is frequent for projects to need commands to be executed continuously.
     When cron or spoolers aren't the way to go, runner provides a simple way to
     create background threads which chains commands continuously. For what it's
-    worth, it's partly documented and we use it in production.
+    worth, it's partly documented.
 
 yourlabs.smoke
     High level tests, like testing if a view returns status 200, are called
     "smoke tests". This application makes creating complete smoke tests for all
     possible urls in your project easy. It's not really ready for a end user.
+
+yourlabs.setup
+    Helps moving away the boilerplate from a django project's settings.py. We
+    use it but it's not documented.
 
 Install
 -------
