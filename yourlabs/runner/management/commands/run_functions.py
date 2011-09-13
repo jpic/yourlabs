@@ -13,16 +13,5 @@ class Command(BaseCommand):
     help = 'Continuously run a set of functions'
 
     def handle(self, *args, **options):
-        functions = []
-
-        for arg in args:
-            s = arg.split('.')
-            function = s[-1]
-            module = '.'.join(s[:-1])
-            module = import_module(module)
-            functions.append(getattr(module, function))
-
-        logger = logging.getLogger('runner')
-
-        r = runner.Runner(functions, logger)
+        r = runner.TaskRunner(args)
         r.run()

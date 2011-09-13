@@ -11,6 +11,34 @@ import os.path
 from django.core.management import call_command
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils.importlib import import_module
+
+import daemon
+
+class TaskRunner(daemon.Daemon):
+    def __init__(self, task_names, pidfile=None, logger='runner', 
+                 allow_concurrent=False):
+        self.functions = []
+
+        names = []
+        for task_name in task_names:
+            s = task_name.split('.')
+            function = s[-1]
+            module = '.'.join(s[:-1])
+            module = import_module(module)
+            function = getattr(module, function)
+            
+            self.functions.append(task()(function))
+            names.append(function.__name__)
+
+        if pidfile is None:
+            pidfile = '_'.join(names)
+
+        super(TaskRunner, self).__init__(pidfile, logger, allow_concurrent)
+
+    def run(self):
+        for function in self.functions:
+            function.runner_task.run()
 
 def task(**options):
     def wrapper(f):
@@ -35,7 +63,7 @@ class Task(object):
 
         self.exceptions = []
         self.consecutive_exceptions = []
-        self.logger = loggin.getLogger(self.options['logger_name'])
+        self.logger = logging.getLogger(self.options['logger_name'])
         self.admin_emails = []
 
     def log(self, level, message, *args):
@@ -86,12 +114,11 @@ class Task(object):
                 if 'exc_tb' in logged_data.keys():
                     # only bloat with gory details if they are different
                     # from last exception
-                    if !self.is_same_exception(exc_type, exc_value, exc_tb, logged_data):
+                    if not self.is_same_exception(exc_type, exc_value, exc_tb, logged_data):
                         data.update({
                             'exc_type': exc_type,
                             'exc_value': exc_value,
                             'exc_tb': exc_tb,
-                            'traceback': tb,
                         })
                     break
         else:
@@ -100,7 +127,6 @@ class Task(object):
                 'exc_value': exc_value,
                 'exc_tb': exc_tb,
                 'downsince': ended,
-                'traceback': ''.join(tb),
             })
 
         self.exceptions.append(data)
@@ -133,26 +159,57 @@ class Task(object):
                 elif last_downtime_email + self.options['non_recoverable_downtime'] > datetime.datetime.now():
                     notify_admins = Task.NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN
 
+        if notify_admins:
+            self.notify_admins(data, notify_admins)
         time.sleep(self.options['fail_cooldown'])
 
-    def notify_admins(self, data):
-        message = []
-        for e in self.exceptions[name]:
-            message.append('Message: ' + e['message'])
-            message.append('Date/Time: ' + str(e['datetime']))
-            message.append('Exception class: ' + e['class'])
-            message.append('Traceback:')
-            message.append(e['traceback'])
-            message.append('')
+    def notify_admins(self, data, reason):
+        if reason == Task.FIRST_EXCEPTION:
+            suject = 'First exception caught: %s' % data['exc_value'].message
+        elif reason == Task.NEW_EXCEPTION:
+            subject = 'New exception caught: %s' % data['exc_value'].message
+        elif reason == Task.NON_RECOVERABLE_DOWNTIME_REACHED:
+            subject = 'Non recoverable downtime reached'
+        elif reason == Task.NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN:
+            suject = 'Non recoverable downtime reached again'
+
+        message = ['Current state details:']
+        message.append('Down since', data['downsince'])
+        message.append('Down time', data['downtime'])
+        message.append('Exception', data['exc_value'].__class__.__name__)
+        message.append('Message', data['exc_value'].message)
+        message.append(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
+
+        message.append('')
+        message.append('')
+
+        if reason != Task.FIRST_EXCEPTION:
+            message.append('Also, here is a list of distinct exceptions raised:')
+            
+            detailed = []
+            for data in self.exceptions:
+                new = True
+
+                for detailed_data in detailed:
+                    if self.is_same_exception(data['exc_type'], 
+                        data['exc_value'], data['exc_tb'], detailed_data):
+                        new = False
+                        break
+                
+                if new:
+                    message.append('')
+                    message.append('Exception', data['exc_value'].__class__.__name__)
+                    message.append('Message', data['exc_value'].message)
+                    message.append(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
 
         send_mail(
-            '[%s] Has been failing for %s consecutive times' % (
-                name,
-                self.consecutive_exceptions[name]
+            '[%s] %s' % (
+                self.name,
+                subject
             ),
             "\n".join(message),
             'critical@yourlabs.org',
-            ['jamespic@gmail.com'],
+            [x[1] for x in settings.ADMINS],
             fail_silently=False
         )
 
@@ -165,135 +222,3 @@ class Task(object):
         if ''.join(tb) != data['traceback']:
             return False
         return True
-
-class Runner(object):
-    def __init__(self, functions, logger, name=None, pidfile=None, killconcurrent=True):
-        self.functions = functions
-        self.logger = logger
-        self.exceptions = {}
-        self.consecutive_exceptions = {}
-        self.killconcurrent = killconcurrent
-        self.name = name or '_'.join([f.__name__ for f in self.functions])
-        self.pidfile = pidfile or os.path.join(settings.RUN_ROOT, self.name + '.pid')
-
-        for function in self.functions:
-            self.exceptions[function.__name__] = []
-            self.consecutive_exceptions[function.__name__] = 0
-
-        self.concurrency_security()
-
-    def log(self, level, message, *args):
-        level = getattr(logging, level.upper())
-        self.logger.log(level, '[%s] ' % self.name + message % args)
-
-    def concurrency_security(self):
-        if os.path.exists(self.pidfile):
-            try:
-                f = open(self.pidfile, 'r')
-                concurrent = f.read()
-                f.close()
-                self.log('debug', 
-                    'Found pidfile %s containing: %s', self.pidfile, concurrent)
-            except Exception:
-                self.log('error', 
-                    'Could not read pidfile %s', self.pidfile)
-
-            if os.path.exists('/proc/%s' % concurrent):
-                if self.killconcurrent:
-                    os.kill(int(concurrent), signal.SIGTERM)
-                    self.log('debug', 'Sent SIGTERM to: %s' % concurrent)
-
-                    i = 0
-                    while os.path.exists('/proc/%s' % concurrent):
-                        time.sleep(5)
-                        if i == 5:
-                            self.log('error', 
-                                'Exiting because concurrent PID %s is still there',
-                                concurrent)
-                            os._exit(-1)
-                        else:
-                            self.log('debug', 
-                                '/proc/%s still exists, waiting another 5 seconds',
-                                concurrent)
-                else:
-                    self.log('error', 
-                        '%s contains a pid (%s) which is still running !',
-                        self.pidfile, concurrent)
-                    os._exit(-1)
-            else:
-                self.log('debug', 'Could not find /proc/%s', concurrent)
-                os.remove(self.pidfile)
-        else:
-            self.log('debug', 
-                'Did not find pidfile %s, continuing normally', self.pidfile)
-
-        f = open(self.pidfile, 'w')
-        f.write(str(os.getpid()))
-        f.flush()
-        # Forcibly sync disk
-        os.fsync(f.fileno())
-        f.close()
-
-    def run(self):
-        while True:
-            for function in self.functions:
-                self.log('debug', 'Endless loop start')
-                name = function.__name__
-
-                try:
-                    self.log('debug', 'Started %s', name)
-                    function()
-                    # it should have not crashed
-                    self.consecutive_exceptions[name] = 0
-                    self.log('info', 
-                        'Task executed without raising an exception: %s', 
-                        name)
-                except Exception as e:
-                    self.log('warning',
-                        'Exception caught running %s with message: %s',
-                        name, e.message)
-
-                    exc_type, exc_value, exc_tb = sys.exc_info()
-                    tb = traceback.format_exception(exc_type, exc_value, exc_tb)
-                    for line in tb:
-                        self.log('debug', line)
-
-                    self.exceptions[name].append({
-                        'exception': e,
-                        'message': e.message,
-                        'class': e.__class__.__name__,
-                        'traceback': ''.join(tb),
-                        'datetime': datetime.datetime.now()
-                    })
-                    self.consecutive_exceptions[name] += 1
-
-                    if self.consecutive_exceptions[name] > 1:
-                        self.log('error', '%s failed %s times', name, 
-                            self.consecutive_exceptions[name])
-                   
-                    if self.consecutive_exceptions[name] >= 5 and \
-                       self.consecutive_exceptions[name] % 5 == 0:
-                        self.log('critical', 
-                            '%s might not even work anymore: failed %s times',
-                                name, 
-                                self.consecutive_exceptions[name])
-
-                        message = []
-                        for e in self.exceptions[name]:
-                            message.append('Message: ' + e['message'])
-                            message.append('Date/Time: ' + str(e['datetime']))
-                            message.append('Exception class: ' + e['class'])
-                            message.append('Traceback:')
-                            message.append(e['traceback'])
-                            message.append('')
-
-                        send_mail(
-                            '[%s] Has been failing for %s consecutive times' % (
-                                name,
-                                self.consecutive_exceptions[name]
-                            ),
-                            "\n".join(message),
-                            'critical@yourlabs.org',
-                            ['jamespic@gmail.com'],
-                            fail_silently=False
-                        )

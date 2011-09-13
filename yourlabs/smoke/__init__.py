@@ -6,16 +6,16 @@ from django.db.models import get_model
 from django.conf import settings
 from django.test import client
 
-logger = logging.getLogger('smoke')
+from yourlabs import runner
 
-settings.LOGGING['loggers']['gsm']['level'] = 'INFO'
+logger = logging.getLogger('smoke')
 
 class SmokeUrl(object):
     def __init__(self, url, tags):
         self.url = url
         self.tags = tags
 
-class Smoke(object):
+class SmokeTask(object):
     def get_client(self):
         c = client.Client()
         c.login(username=settings.SMOKE_TEST_USERNAME, password=settings.SMOKE_TEST_PASSWORD)
