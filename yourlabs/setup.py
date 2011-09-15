@@ -165,7 +165,7 @@ class Setup(object):
 
             if s['USE_PINAX']:
                 s['STATICFILES_DIRS'].append(
-                    os.path.join(s['PINAX_ROOT'], 'templates', s['PINAX_THEME']))
+                    os.path.join(s['PINAX_ROOT'], 'media', s['PINAX_THEME']))
         
         self.paths.append(s['STATIC_ROOT'])
 
@@ -213,7 +213,7 @@ class Setup(object):
         s = self.settings
 
         s['USE_I18N'] = value
-        s['USE_L18N'] = value
+        s['USE_L10N'] = value
 
     def logging(self, value=True):
         if not self.ready: return
@@ -299,8 +299,8 @@ class Setup(object):
         if not self.ready: return
         s = self.settings
 
-        if 'HAYSTACK_ENABLE_REGISTRATION' not in s.keys():
-            s['HAYSTACK_ENABLE_REGISTRATION'] = False
+        if 'HAYSTACK_ENABLE_REGISTRATIONS' not in s.keys():
+            s['HAYSTACK_ENABLE_REGISTRATIONS'] = False
         if 'HAYSTACK_SITECONF' not in s.keys():
             s['HAYSTACK_SITECONF'] = 'search_sites'
         if 'HAYSTACK_SEARCH_ENGINE' not in s.keys():

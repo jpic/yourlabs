@@ -1,3 +1,4 @@
+import sys
 import logging
 import pickle
 import traceback
@@ -15,7 +16,7 @@ class SmokeUrl(object):
         self.url = url
         self.tags = tags
 
-class SmokeTask(object):
+class Smoke(object):
     def get_client(self):
         c = client.Client()
         c.login(username=settings.SMOKE_TEST_USERNAME, password=settings.SMOKE_TEST_PASSWORD)
@@ -38,9 +39,12 @@ class SmokeTask(object):
                     failurl.tags.add(smoke_url.tags)
                     continue
             except Exception as e:
+                exc_type, exc_value, exc_tb = sys.exc_info()
+                print ''.join(traceback.format_exception(
+                                exc_type, exc_value, exc_tb))
                 logger.error('exception %s in %s' % (e, smoke_url.url))
-                print traceback.print_tb(e.exc_info[2])
-                failurl.traceback = pickle.dumps(traceback.extract_tb(e.exc_info[2]))
+                failurl.traceback = pickle.dumps(traceback.format_exception(
+                                exc_type, exc_value, exc_tb))
                 failurl.exception = unicode(e)
                 failurl.reason = 'exception'
                 failurl.save()
