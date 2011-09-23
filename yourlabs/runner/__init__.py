@@ -34,7 +34,7 @@ class TaskRunner(daemon.Daemon):
             names.append(function.__name__)
 
         if pidfile is None:
-            pidfile = '_'.join(names)
+            pidfile = os.path.join(settings.RUN_ROOT, '_'.join(names))
 
         super(TaskRunner, self).__init__(pidfile, logger, allow_concurrent)
         self.concurrency_security()
