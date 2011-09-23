@@ -291,6 +291,7 @@ class Setup(object):
         self.setup_emailconfirmation()
         self.setup_localeurl()
         self.setup_yourlabs()
+        self.setup_subscription()
 
         if s['USE_PINAX']:
             self.setup_pinax_account()
@@ -360,7 +361,20 @@ class Setup(object):
         
         if 'LOGIN_URL' not in s.keys():
             s['LOGIN_URL']='/account/login/'
-    
+   
+    def setup_subscription(self):
+        if not self.ready: return
+        s = self.settings
+
+        s['SUBSCRIPTION_BACKENDS'] = {
+            'site': 'subscription.examples.yourlabs.backends.SiteBackend',
+        }
+
+        s['SUBSCRIPTION_NOTIFICATION_QUEUES'] = [
+            'chat',
+            'friends',
+        ]
+
     def setup_yourlabs(self):
         if not self.ready: return
         s = self.settings
