@@ -1,3 +1,4 @@
+import random
 from datetime import timedelta as td
 
 from yourlabs import runner
@@ -14,3 +15,13 @@ class Divide(object):
 def divide_by_zero():
     divide = Divide(1, 0)
     divide.divide()
+
+@runner.task(fail_cooldown=td(seconds=1), non_recoverable_downtime=td(seconds=10), success_cooldown=1)
+def divide_by_zero_sometimes():
+    print 'running'
+    if random.randrange(0, 2, 1):
+        divide = Divide(1, 0)
+    else:
+        divide = Divide(1, 1)
+    divide.divide()
+    print 'done running'

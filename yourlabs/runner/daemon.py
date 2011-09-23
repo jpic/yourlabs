@@ -1,4 +1,5 @@
 import os
+import signal
 import logging
 import time
 
@@ -29,7 +30,7 @@ class Daemon(object):
                     'Could not read pidfile %s', self.pidfile)
 
             if os.path.exists('/proc/%s' % concurrent):
-                if self.killconcurrent:
+                if not self.allow_concurrent:
                     os.kill(int(concurrent), signal.SIGTERM)
                     self.log('debug', 'Sent SIGTERM to: %s' % concurrent)
 

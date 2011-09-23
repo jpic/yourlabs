@@ -299,8 +299,6 @@ class Setup(object):
         if not self.ready: return
         s = self.settings
 
-        if 'HAYSTACK_ENABLE_REGISTRATION' not in s.keys():
-            s['HAYSTACK_ENABLE_REGISTRATION'] = False
         if 'HAYSTACK_SITECONF' not in s.keys():
             s['HAYSTACK_SITECONF'] = 'search_sites'
         if 'HAYSTACK_SEARCH_ENGINE' not in s.keys():
