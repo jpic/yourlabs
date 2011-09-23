@@ -55,6 +55,7 @@ class Task(object):
     NEW_EXCEPTION = 2
     NON_RECOVERABLE_DOWNTIME_REACHED = 3
     NON_RECOVERABLE_DOWNTIME_REACHED_AGAIN = 4
+    HEALED = 5
 
     def __init__(self, function, **options):
         self.function = function
@@ -96,7 +97,30 @@ class Task(object):
 
     def success(self, started, ended):
         self.log('debug', 'Execution successfull')
-        self.exceptions.append(self.consecutive_exceptions)
+        if len(self.consecutive_exceptions):
+            self.exceptions += self.consecutive_exceptions
+            message = [
+                'After some failures, the process executed successfully again!',
+                'Anyway, here is a list of distinct exceptions raised since last successful run:',
+            ]
+            detailed = []
+            message += self.format_exceptions_message(self.consecutive_exceptions, detailed)
+
+            message.append('Also, here is a list of distinct exceptions raised before last successful run:')
+            message += self.format_exceptions_message(self.exceptions, detailed)
+            send_mail(
+                '[%s] %s' % (self.name, 'Process healed'),
+                "\n".join(message),
+                'critical@yourlabs.org',
+                [x[1] for x in settings.ADMINS],
+                fail_silently=False
+            )
+
+            self.admin_emails.append({
+                'reason': Task.HEALED,
+                'datetime': datetime.datetime.now()
+            })
+            self.log('debug', 'Sent email to admins: Process healed')
         self.consecutive_exceptions = []
         time.sleep(self.options['success_cooldown'].seconds)
 
@@ -112,7 +136,13 @@ class Task(object):
           email stays in the top of the admin's mailbox
         """
         
-        self.log('debug', 'Execution failed')
+        self.log('debug', 'Execution failed:')
+        self.log('debug', 'Exception  %s' % exc_value.__class__.__name__)
+        self.log('debug', 'Message  %s' % exc_value.message)
+        self.log('debug', ''.join(traceback.format_exception(
+            exc_type, exc_value, exc_tb)))
+
+
         data = {
             'started': started,
             'ended': ended,
@@ -208,26 +238,8 @@ class Task(object):
 
         if reason != Task.FIRST_EXCEPTION:
             message.append('Also, here is a list of distinct exceptions raised:')
-            
-            detailed = []
-            for data in self.exceptions:
-                if 'exc_value' not in data.keys():
-                    continue
+            message += self.format_exceptions_message(self.exceptions)
 
-                new = True
-
-                for detailed_data in detailed:
-                    if self.is_same_exception(data['exc_type'], 
-                        data['exc_value'], data['exc_tb'], detailed_data):
-                        new = False
-                        break
-                
-                if new:
-                    message.append('')
-                    message.append('Exception  %s' % data['exc_value'].__class__.__name__)
-                    message.append('Message  %s' % data['exc_value'].message)
-                    message.append(''.join(traceback.format_exception(
-                        data['exc_type'], data['exc_value'], data['exc_tb'])))
 
         send_mail(
             '[%s] %s' % (
@@ -248,6 +260,9 @@ class Task(object):
         self.log('debug', 'Sent email to admins: %s', subject)
 
     def is_same_exception(self, exc_type, exc_value, exc_tb, data):
+        if 'exc_type' not in data.keys():
+            return True
+
         tb = traceback.format_exception(exc_type, exc_value, exc_tb)
         tb2 =traceback.format_exception(
                 data['exc_type'], data['exc_value'], data['exc_tb'])
@@ -268,3 +283,31 @@ class Task(object):
             if 'exc_tb' in logged_data.keys():
                 return (logged_data['exc_type'], logged_data['exc_value'], 
                         logged_data['exc_tb'])
+
+    def format_exceptions_message(self, exceptions, detailed=None):
+        message = []
+        
+        if detailed is None:
+            detailed = []
+
+        for data in exceptions:
+            if 'exc_value' not in data.keys():
+                continue
+
+            new = True
+
+            for detailed_data in detailed:
+                if self.is_same_exception(data['exc_type'], 
+                    data['exc_value'], data['exc_tb'], detailed_data):
+                    new = False
+                    break
+            
+            if new:
+                message.append('')
+                message.append('Exception  %s' % data['exc_value'].__class__.__name__)
+                message.append('Message  %s' % data['exc_value'].message)
+                message.append(''.join(traceback.format_exception(
+                    data['exc_type'], data['exc_value'], data['exc_tb'])))
+            detailed.append(data)
+
+        return message
