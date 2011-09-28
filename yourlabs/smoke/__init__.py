@@ -9,6 +9,11 @@ from django.test import client
 
 from yourlabs import runner
 
+try:
+    from sentry.client.models import sentry_exception_handler
+except ImportError:
+    sentry_exception_handler = False
+
 logger = logging.getLogger('smoke')
 
 class SmokeUrl(object):
@@ -39,6 +44,9 @@ class Smoke(object):
                     failurl.tags.add(smoke_url.tags)
                     continue
             except Exception as e:
+                if sentry_exception_handler:
+                    sentry_exception_handler(request=response.request)
+
                 exc_type, exc_value, exc_tb = sys.exc_info()
                 print ''.join(traceback.format_exception(
                                 exc_type, exc_value, exc_tb))
