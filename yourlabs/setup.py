@@ -48,18 +48,6 @@ class Setup(object):
             self.settings['PROJECT_ROOT'] = self.PROJECT_ROOT
             self.ready = True
 
- 
-    def debug_settings(self):
-        return {
-            'INSTALLED_APPS': [
-                'devserver',
-                'debug_toolbar',
-            ],
-            'MIDDLEWARE_CLASSES': [
-                'debug_toolbar.middleware.DebugToolbarMiddleware'
-            ]
-        }
-
     def debug(self, value=True):
         if not self.ready: return
         s = self.settings
@@ -67,12 +55,6 @@ class Setup(object):
         s['DEBUG'] = value
         s['SERVE_MEDIA'] = value
         s['TEMPLATE_DEBUG'] = value
-
-        if not value:
-            for k, v in self.debug_settings().items():
-                for x in v:
-                    if x in v:
-                        s[k].pop(v.index(x))
 
     def full(self):
         self.defaults()
@@ -291,7 +273,6 @@ class Setup(object):
         self.setup_emailconfirmation()
         self.setup_localeurl()
         self.setup_yourlabs()
-        self.setup_subscription()
 
         if s['USE_PINAX']:
             self.setup_pinax_account()
@@ -361,19 +342,6 @@ class Setup(object):
         
         if 'LOGIN_URL' not in s.keys():
             s['LOGIN_URL']='/account/login/'
-   
-    def setup_subscription(self):
-        if not self.ready: return
-        s = self.settings
-
-        s['SUBSCRIPTION_BACKENDS'] = {
-            'site': 'subscription.examples.yourlabs.backends.SiteBackend',
-        }
-
-        s['SUBSCRIPTION_NOTIFICATION_QUEUES'] = [
-            'chat',
-            'friends',
-        ]
 
     def setup_yourlabs(self):
         if not self.ready: return
