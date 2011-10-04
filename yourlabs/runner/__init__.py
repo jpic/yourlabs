@@ -82,7 +82,11 @@ class Task(object):
         elif isinstance(self.logger, str):
             self.logger = logging.getLogger(self.logger)
         level = getattr(logging, level.upper())
-        self.logger.log(level, '[%s] ' % self.name + message % args)
+        prefix = '[%s] ' % self.name
+        if message.find('\n') < 0:
+            # don't format tracebacks ...
+            message = message % args
+        self.logger.log(level, prefix + message)
 
     def run(self):
         try:
