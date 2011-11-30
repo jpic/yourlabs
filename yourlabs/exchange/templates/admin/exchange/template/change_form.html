@@ -1,0 +1,50 @@
+{% extends 'admin/change_form.html' %}
+
+{% load url from future %}
+
+{% block content %}
+    {{ block.super }}
+    
+    <form id="parser">
+    </form>
+
+    <script type="text/javascript">
+    (function($) { $(document).ready(function() {
+        // make jQuery compatible with django
+        $.ajaxSettings.traditional = true;
+
+        $('input[type=submit][name=_addanother]').remove()
+        $('input[type=submit][name=_save]').remove()
+
+        {% if original.pk %}
+        $('select[name=parser_class]').parent().append(
+            $('select[name=parser_class] option:selected').html());
+        $('select[name=parser_class]').hide()
+
+        function get_data() {
+            data = 'pk={{ original.pk }}';
+            $('form').each(function() {
+                data += '&' + $(this).serialize();
+            });
+            return data;
+        }
+        function post_data() {
+            $.post(
+                '{% url 'yourlabs_exchange_parser_form' %}',
+                get_data(),
+                function(data, textStatus, jqXHR) {
+                    $('form#parser').html(data);
+                },
+                'html'
+            );
+        }
+
+        post_data();
+        $('form#parser input').live('change', function() {
+            post_data();
+        });
+        {% endif %}
+
+    }); })(django.jQuery)
+    </script>
+{% endblock %}

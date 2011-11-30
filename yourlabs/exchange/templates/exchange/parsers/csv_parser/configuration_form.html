@@ -1,0 +1,16 @@
+<table>
+    <tr>
+        {% for action in actions %}
+        <th>
+            <input type="text" value="{{ action }}" name="_parser_action" />
+        </th>
+        {% endfor %}
+    </tr>
+    {% for row in rows %}
+    <tr>
+        {% for col in row %}
+        <td>{{ col|truncatewords:5 }}</td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</table>
